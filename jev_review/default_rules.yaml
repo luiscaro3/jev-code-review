@@ -1,0 +1,35 @@
+# These rules demonstrate semantic review. Probabilities are model scores,
+# not measured defect probabilities.
+schema_version: 1
+provider:
+  endpoint: "https://api.typesafe.ai/v1/systemone"
+  model: "jev-latest"
+  timeout_seconds: 90
+  max_retries: 4
+rules:
+  "Product logic exercised":
+    enabled: true
+    applies_to: ["test"]
+    instructions: "Does this test reach product-owned behavior before making its assertion?"
+    criteria:
+      product_behavior: "The test visibly exercises application-owned transformation, policy, interaction, or error handling."
+      test_double_only: "The assertion observes only an output programmed into and returned directly by a test double."
+      insufficient_evidence: "The supplied test does not show enough behavior to determine which path produces the asserted result."
+    finding_choice: "test_double_only"
+    unknown_choice: "insufficient_evidence"
+    warning_probability: 0.50
+    flag_probability: 0.90
+    message: "The assertion may observe only behavior programmed into the test double."
+  "Consumer contract asserted":
+    enabled: true
+    applies_to: ["test"]
+    instructions: "Does this test assert the observable contract identified by its title or nearby contract comment?"
+    criteria:
+      contract_observed: "The assertion checks the caller-visible value, state, interaction, or error detail promised by the test title or contract comment."
+      adjacent_only: "The assertion checks a nearby condition but omits the promised caller-visible outcome."
+      insufficient_evidence: "The supplied test does not identify enough of the promised contract to decide."
+    finding_choice: "adjacent_only"
+    unknown_choice: "insufficient_evidence"
+    warning_probability: 0.50
+    flag_probability: 0.90
+    message: "The assertion may omit the caller-visible outcome named by the test."

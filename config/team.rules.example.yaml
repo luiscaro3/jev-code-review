@@ -1,0 +1,6 @@
+schema_version: 1
+rules:
+  "Product logic exercised":
+    flag_probability: 0.95
+  "Consumer contract asserted":
+    warning_probability: 0.60

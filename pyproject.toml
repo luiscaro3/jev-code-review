@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jev-code-review"
+version = "0.1.0"
+description = "Experimental semantic review of TypeScript tests with Jev"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Luis" }]
+dependencies = [
+  "PyYAML>=6.0,<7",
+  "tree-sitter>=0.25,<0.27",
+  "tree-sitter-typescript>=0.23,<0.24",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "ruff>=0.8,<1"]
+
+[project.scripts]
+jev-review = "jev_review.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["jev_review*"]
+
+[tool.setuptools.package-data]
+jev_review = ["default_rules.yaml"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+markers = ["live: calls the TypeSafe API and requires TYPESAFE_API_KEY"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]

@@ -1,0 +1,271 @@
+schema_version: 1
+status: "demonstration_suite_pending_blind_validation"
+checks:
+  - id: R01
+    domain: Release readiness
+    title: Production dependencies are deployable
+    rule: "Flag a change that introduces a required runtime input or service but leaves an applicable deployment target unable to provide it."
+    evidence: "The handler now reads WEBHOOK_SIGNING_SECRET. The production deployment definition has no value or secret binding for that name, although the unit test assigns one in process.env."
+    code: |-
+      export function verifyWebhook(body: string, signature: string) {
+        return verify(body, signature, process.env.WEBHOOK_SIGNING_SECRET!);
+      }
+
+      // The production manifest has no WEBHOOK_SIGNING_SECRET binding.
+  - id: R02
+    domain: Design pressure
+    title: Today's design pays for today's needs
+    rule: "Flag an extensibility layer whose only stated purpose is a hypothetical consumer, with no current boundary or behavior requiring it."
+    evidence: "A provider registry and factory were added around the sole email provider. The PR names no current alternate provider, policy boundary, or testing seam; it says the layers may help someday."
+    code: |-
+      interface MailProvider { send(message: Message): Promise<void>; }
+      class ProviderRegistry { providers = new Map<string, MailProvider>(); }
+      class ProviderFactory { create(name: string) { return registry.providers.get(name)!; } }
+
+      // Only smtp exists; the PR says the registry is for possible future providers.
+  - id: R03
+    domain: Evidence quality
+    title: Root-cause statements show discrimination
+    rule: "Flag a definitive causal claim when the supplied investigation does not distinguish that cause from credible alternatives."
+    evidence: "The change log calls serializer drift the confirmed source of duplicate messages. No controlled replay links the serializer to duplication, while producer retries and duplicate source events remain untested alternatives."
+    code: |-
+      // Commit: Fix the confirmed serializer root cause for duplicate events.
+      export const encodeEvent = (event: Event) => JSON.stringify(event);
+      // No replay separates serialization from producer retries or duplicate inputs.
+  - id: R04
+    domain: Test signal
+    title: The test reaches product-owned logic
+    rule: "Flag a test whose asserted result is produced entirely by the test double it configures, without exercising product-owned behavior."
+    evidence: "The test programs a stub to return a profile, calls the stub itself, and compares the returned profile. No application function consumes the stub."
+    code: |-
+      it('loads a profile', async () => {
+        const gateway = vi.fn().mockResolvedValue({ displayName: 'Mina' });
+        const profile = await gateway('p-1');
+        expect(profile.displayName).toBe('Mina');
+      });
+  - id: R05
+    domain: Architecture boundaries
+    title: Writes stay with their owning component
+    rule: "Flag a write that bypasses an applicable published ownership boundary without an approved exception."
+    evidence: "The service contract assigns subscription-status writes to Membership. This Payments change updates Membership's table directly, and the review packet contains no exception."
+    code: |-
+      // Service contract: Membership owns subscription-status writes.
+      export async function markPaid(memberId: string) {
+        return paymentsDb.raw('update membership.subscriptions set status = ?', ['active']);
+      }
+  - id: R06
+    domain: Review closure
+    title: Resolution covers the reported surface
+    rule: "Flag a resolved review thread when the response addresses only part of the reported problem and records no disposition for the remainder."
+    evidence: "A comment identifies missing cancellation in three polling components. The reply adds cancellation to one component, leaves two unchanged, gives no disposition, and resolves the thread."
+    code: |-
+      export const pollOrders = () => poll({ signal: ordersController.signal });
+      export const pollInvoices = () => poll();
+      export const pollProfiles = () => poll();
+      // Reply: Added cancellation to orders. Resolving.
+  - id: R07
+    domain: Operational durability
+    title: Every accumulating asset has an end state
+    rule: "Flag repeatedly created storage or infrastructure that has no cap, replacement behavior, expiration, deletion path, or accountable retention owner."
+    evidence: "Each authentication attempt creates a new Redis session index. The keys have no expiration, bounded cardinality, cleanup process, or documented retention owner."
+    code: |-
+      export async function indexSession(userId: string, sessionId: string) {
+        await redis.sAdd(`session-index:${userId}`, sessionId);
+      }
+  - id: R08
+    domain: Design pressure
+    title: One responsibility has one active implementation
+    rule: "Flag equivalent implementations retained for the same responsibility when no contract difference or migration plan explains both."
+    evidence: "The new verifyPartnerSignature and existing validateWebhookSignature use the same digest, inputs, and error contract. Both remain active, with no migration plan or distinct consumers."
+    code: |-
+      export const validateWebhookSignature = (body: string, sig: string) => hmac(body) === sig;
+      export const verifyPartnerSignature = (body: string, sig: string) => hmac(body) === sig;
+  - id: R09
+    domain: Test signal
+    title: Assertions verify the contract callers consume
+    rule: "Flag an assertion that checks a nearby condition while omitting the observable value or failure detail promised to callers."
+    evidence: "The webhook contract promises the response header retry-after when throttled. The test checks only status 429 and never observes the required header."
+    code: |-
+      it('returns retry guidance when throttled', async () => {
+        const response = await sendWebhook(overLimitTenant);
+        expect(response.status).toBe(429);
+      });
+  - id: R10
+    domain: Change integrity
+    title: The review diff starts from the intended base
+    rule: "Flag a review whose actual base introduces unrelated commits or differs from the declared target."
+    evidence: "The PR targets trunk but was branched from experiment/new-cart. Its diff includes nine experiment commits that are not intended for this change."
+    code: |-
+      // Declared target: trunk
+      // Actual merge base: experiment/new-cart
+      import { experimentalCart } from './experiments/cart';
+      export const formatReceipt = (r: Receipt) => experimentalCart.decorate(r);
+  - id: R11
+    domain: Evidence quality
+    title: Scope every absence assertion
+    rule: "Flag a claim that something is absent when it does not identify the repositories, documents, environments, or systems examined."
+    evidence: "The rationale says no consumer still calls the legacy endpoint, but it identifies no repositories, traffic logs, client inventory, or support window that was examined."
+    code: |-
+      // Rationale: No consumer uses /v1/archive anymore.
+      router.delete('/v1/archive', removeLegacyArchive);
+  - id: R12
+    domain: Design pressure
+    title: Existing shared capability is considered
+    rule: "Flag a new local implementation that duplicates an applicable shared capability without a requirement-based reason for diverging."
+    evidence: "The platform already publishes an approved envelope-encryption library with key rotation. The service adds equivalent local encryption and documents no incompatible requirement."
+    code: |-
+      // platform/envelope already encrypts payloads and rotates data keys.
+      export const encryptLocal = (value: Buffer) => aesGcm(localKey, value);
+  - id: R13
+    domain: Test signal
+    title: Failure-path doubles can actually fail
+    rule: "Flag a suite that claims to exercise an error path through a test double that is incapable of producing the required failure."
+    evidence: "The timeout-handling test expects a recovery event, but the payment fake always returns success and is never configured to time out."
+    code: |-
+      const payments = { charge: vi.fn().mockResolvedValue({ ok: true }) };
+      it('publishes recovery after timeout', async () => {
+        await checkout(payments);
+        expect(events.publish).toHaveBeenCalledWith('payment-recovery');
+      });
+  - id: R14
+    domain: Design pressure
+    title: New public surface has a current consumer
+    rule: "Flag a newly exposed symbol with no caller, registration, required interface, or present responsibility."
+    evidence: "Searches of imports, dependency registration, and runtime lookup find no use of exported SessionFacade. Its only method returns its input unchanged."
+    code: |-
+      export class SessionFacade {
+        unwrap(session: Session): Session { return session; }
+      }
+      // No import, registration, reflection lookup, or framework hook references it.
+  - id: R15
+    domain: Review closure
+    title: The recipient can act on the response
+    rule: "Flag a review response that cannot be used in its target channel because it exceeds the required shape or leaves out the recipient's decision or next action."
+    evidence: "A release-blocker field requires at most 80 words plus an owner and decision. The response is 600 words and contains neither an owner nor a blocker decision."
+    code: |-
+      // Destination contract: <= 80 words; include BLOCK/ALLOW and owner.
+      // Submitted response: 600-word narrative with no decision or owner.
+  - id: R16
+    domain: Evidence quality
+    title: Uncertain facts stay marked uncertain
+    rule: "Flag an inferred or unconfirmed value presented as authoritative without marking its uncertainty."
+    evidence: "The runbook states that session data may be retained for 24 hours, based only on a common cache default. No policy owner or service contract confirms that duration."
+    code: |-
+      // Runbook: Session retention is approved for 24 hours.
+      // Basis: inferred from a common cache default; no policy was checked.
+      export const SESSION_TTL_SECONDS = 86_400;
+  - id: R17
+    domain: Test signal
+    title: Tests target reachable behavior
+    rule: "Flag a test for a branch that applicable runtime entry points prevent callers from reaching, unless a public contract requires direct access."
+    evidence: "The test exercises an archived-order branch inside a handler, but the exported dispatcher filters archived orders before calling that handler and no direct-call contract exists."
+    code: |-
+      export const dispatch = (order: Order) => order.status === 'archived' ? ignored() : handle(order);
+      it('emails archived orders', () => handle({ status: 'archived' } as Order));
+  - id: R18
+    domain: Change integrity
+    title: Behavior matches the accepted request
+    rule: "Flag product behavior that the accepted request excludes or that lacks required approval when the intended outcome is known."
+    evidence: "The accepted request changes dashboard column sorting and explicitly excludes account lifecycle work. The same change adds a public team-deactivation endpoint without follow-up approval."
+    code: |-
+      export const sortColumns = (columns: Column[]) => columns.toSorted(byLabel);
+      router.post('/teams/:id/deactivate', deactivateTeam);
+      // Accepted request excludes account lifecycle changes.
+  - id: R19
+    domain: Evidence quality
+    title: Technical claims match the governing artifact
+    rule: "Flag a verified-sounding technical claim when the applicable configuration, contract, or other authoritative artifact contradicts it."
+    evidence: "The code comment says the current schema allows region to be omitted, but the checked-in request schema marks region as required."
+    code: |-
+      // Comment: region is optional under the current request schema.
+      export const region = request.region ?? 'us-east';
+      // request.schema.json lists region in its required array.
+  - id: R20
+    domain: Operational durability
+    title: Only expose live operating controls
+    rule: "Flag a new setting that exists only for speculative future variation and has no current deployment, security, or operational consumer."
+    evidence: "A command-line flag selects a future regional catalog endpoint. Only one endpoint exists, every deployment uses it, and the flag is justified solely by a possible later expansion."
+    code: |-
+      export const catalogRegion = flags.string('catalog-region', { default: 'global' });
+      export const catalogUrl = endpoints[catalogRegion]; // only 'global' exists
+  - id: R21
+    domain: Test signal
+    title: Deleting a test preserves its unique guarantee
+    rule: "Flag removal justified only by unchanged coverage when the deleted test uniquely protected an observable guarantee."
+    evidence: "A test for the exact public error payload is deleted because branch coverage stays constant. Remaining tests execute the branch but never assert the error code clients parse."
+    code: |-
+      // Removed: expect(response.body.code).toBe('CARD_EXPIRED')
+      // Remaining tests execute the error branch but assert only status 400.
+  - id: R22
+    domain: Review closure
+    title: Verify the artifact before declaring completion
+    rule: "Flag a completion statement that describes intent rather than the current artifact or is contradicted by the latest diff."
+    evidence: "The author says retries were disabled, but the latest configuration still sets maxAttempts to four for the same operation."
+    code: |-
+      // Reply: Disabled automatic retries.
+      export const deliveryPolicy = { maxAttempts: 4, backoffMs: 250 };
+  - id: R23
+    domain: Design pressure
+    title: Indirection contributes behavior or isolation
+    rule: "Flag a forwarding layer that adds no behavior, required contract, ownership boundary, or substitutable seam."
+    evidence: "RepositoryProxy.get forwards the identifier to repository.get unchanged, adds no policy or translation, and is not required by a contract or substitutable boundary."
+    code: |-
+      export class RepositoryProxy {
+        constructor(private readonly repository: Repository) {}
+        get(id: string) { return this.repository.get(id); }
+      }
+  - id: R24
+    domain: Test signal
+    title: New guarantees are exercised at the caller boundary
+    rule: "Flag a new or changed guarantee when no test observes it from the boundary where callers rely on it."
+    evidence: "The public API now promises that cancellation stops future billing. Tests cover the cancel response but never advance a billing cycle or observe that no later charge occurs."
+    code: |-
+      /** Cancelling a subscription prevents every future charge. */
+      export const cancelSubscription = (id: string) => subscriptions.cancel(id);
+      // No caller-level test observes a later billing cycle.
+  - id: R25
+    domain: Change integrity
+    title: Adjacent work is separated or approved
+    rule: "Flag an unrelated change bundled into the review without explicit inclusion in the accepted outcome."
+    evidence: "A rounding fix also rewrites notification routing. The routing rewrite may be valid, but it has its own behavior and no approval within this change."
+    code: |-
+      export const roundTotal = (n: number) => cents(n);
+      export class NotificationRouter { constructor(readonly channels: Channel[]) {} }
+      // The request covers rounding only.
+  - id: R26
+    domain: Test signal
+    title: A production regression can break the test
+    rule: "Flag a test whose outcome depends only on values created inside the test and cannot change when production behavior regresses."
+    evidence: "The test assigns actual to the literal number three and immediately expects three. It imports and calls no product code."
+    code: |-
+      it('returns three retry slots', () => {
+        const actual = 3;
+        expect(actual).toBe(3);
+      });
+  - id: R27
+    domain: Operational durability
+    title: Approve lasting infrastructure explicitly
+    rule: "Flag a durable schema, storage, queue, or operational obligation added outside the accepted outcome."
+    evidence: "A UI-label request also provisions a permanent queue and consumer group. The accepted outcome covers copy changes only and contains no operational approval."
+    code: |-
+      // Accepted outcome: rename a dashboard label.
+      resource "message_queue" "activity_rebuild" {}
+      resource "consumer_group" "activity_rebuild_workers" {}
+  - id: R28
+    domain: Review closure
+    title: Objections need evidence and impact
+    rule: "Flag a rebuttal that relies on an unsupported principle and supplies neither relevant evidence nor a concrete outcome of accepting or rejecting the request."
+    evidence: "The reply declines a requested transaction boundary with only 'this is cleaner.' It provides no evidence, alternative, or concrete failure mode affected by either choice."
+    code: |-
+      // Review: Keep the ledger write and balance update in one transaction.
+      // Reply: Declined. This is cleaner.
+      export const postPayment = async (p: Payment) => { await ledger.add(p); await balance.update(p); };
+  - id: R29
+    domain: Test signal
+    title: Tests protect our dependency contract
+    rule: "Flag a test that merely reconfirms platform or library behavior without exercising an application-owned compatibility assumption or integration contract."
+    evidence: "The test sorts a literal number array with the platform method and checks the native result. It invokes no product code and protects no documented compatibility assumption."
+    code: |-
+      it('sorts numbers', () => {
+        expect([3, 1, 2].sort()).toEqual([1, 2, 3]);
+      });
